@@ -10,7 +10,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QSpinBox, QCheckBox, QPushButton,
     QGroupBox, QMessageBox, QFrame, QSizePolicy,
 )
@@ -26,14 +26,15 @@ AUTORUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 AUTORUN_NAME = "VlessMonitor"
 
 
-class SettingsWindow(QWidget):
+class SettingsWindow(QDialog):
     config_changed = pyqtSignal(dict)
 
     def __init__(self, config: dict):
         super().__init__()
         self._cfg = dict(config)
         self.setWindowTitle("Настройки — VLESS Monitor")
-        self.setFixedSize(560, 520)
+        self.setMinimumSize(580, 500)
+        self.resize(620, 530)
         self._setup_ui()
         self._load_values()
 
@@ -47,15 +48,19 @@ class SettingsWindow(QWidget):
         # ── VLESS ──────────────────────────────────────────
         grp_vless = self._group("VLESS подключение")
         fl = QFormLayout(grp_vless)
-        fl.setSpacing(8)
+        fl.setSpacing(10)
+        fl.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self._uri_edit = QLineEdit()
         self._uri_edit.setPlaceholderText("vless://UUID@host:port?...")
+        self._uri_edit.setMinimumHeight(32)
         self._uri_edit.setStyleSheet(self._input_style())
         fl.addRow("VLESS URI:", self._uri_edit)
 
         self._port_spin = QSpinBox()
         self._port_spin.setRange(1024, 65535)
+        self._port_spin.setMinimumWidth(120)
+        self._port_spin.setMinimumHeight(32)
         self._port_spin.setStyleSheet(self._input_style())
         fl.addRow("Локальный SOCKS5 порт:", self._port_spin)
 
@@ -64,23 +69,27 @@ class SettingsWindow(QWidget):
         # ── Checks ─────────────────────────────────────────
         grp_chk = self._group("Параметры проверок")
         fl2 = QFormLayout(grp_chk)
-        fl2.setSpacing(8)
+        fl2.setSpacing(10)
+        fl2.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self._interval_spin = QSpinBox()
         self._interval_spin.setRange(10, 3600)
         self._interval_spin.setSuffix(" сек")
+        self._interval_spin.setMinimumWidth(120); self._interval_spin.setMinimumHeight(32)
         self._interval_spin.setStyleSheet(self._input_style())
         fl2.addRow("Интервал проверки:", self._interval_spin)
 
         self._dpi_kb_spin = QSpinBox()
         self._dpi_kb_spin.setRange(8, 256)
         self._dpi_kb_spin.setSuffix(" КБ")
+        self._dpi_kb_spin.setMinimumWidth(120); self._dpi_kb_spin.setMinimumHeight(32)
         self._dpi_kb_spin.setStyleSheet(self._input_style())
         fl2.addRow("DPI probe размер:", self._dpi_kb_spin)
 
         self._ratio_spin = QSpinBox()
         self._ratio_spin.setRange(2, 20)
         self._ratio_spin.setSuffix("×")
+        self._ratio_spin.setMinimumWidth(120); self._ratio_spin.setMinimumHeight(32)
         self._ratio_spin.setStyleSheet(self._input_style())
         fl2.addRow("Порог задержки (ratio):", self._ratio_spin)
 
@@ -180,9 +189,7 @@ class SettingsWindow(QWidget):
             self._set_autostart(False)
 
         self.config_changed.emit(dict(self._cfg))
-        QMessageBox.information(self, "Сохранено",
-                                "Настройки сохранены.\nИзменения применятся на следующем цикле проверок.")
-        self.close()
+        self.accept()  # closes dialog AND unblocks .exec() call
 
     def _is_autostart_set(self) -> bool:
         try:

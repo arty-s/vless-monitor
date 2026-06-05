@@ -89,17 +89,11 @@ def main():
 
     # ── First-run: no VLESS URI configured ───────────────────
     if not cfg.get("vless_uri"):
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(
-            None, "VLESS Monitor — первый запуск",
-            "Добро пожаловать!\n\nВставьте вашу VLESS-ссылку в окне настроек."
-        )
         sw = SettingsWindow(cfg)
-        sw.setWindowModality(Qt.WindowModality.ApplicationModal)
-        sw.show()
-        app.exec()
+        sw.setWindowTitle("VLESS Monitor — первый запуск: введите VLESS-ссылку")
+        result = sw.exec()          # blocks until accept() / reject()
         cfg = load_config()
-        if not cfg.get("vless_uri"):
+        if result != SettingsWindow.DialogCode.Accepted or not cfg.get("vless_uri"):
             sys.exit(0)
 
     # ── Parse VLESS ──────────────────────────────────────────
