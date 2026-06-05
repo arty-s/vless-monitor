@@ -1,22 +1,26 @@
-# Personal config (contains your VLESS URI and secrets)
+# Personal config (contains your VLESS URI and secret)
 config.json
+client/config.json
 
 # xray binary (downloaded automatically on first run)
-xray/xray.exe
-xray/*.zip
+xray/
+client/xray/
+*.zip
 
-# PyInstaller
-build/
-dist/
-*.spec.bak
+# .NET build output
+client/bin/
+client/obj/
+client/publish/
+[Bb]in/
+[Oo]bj/
+
+# Legacy PyInstaller build output
+/dist/
+/build/
+
+# Python cache (legacy)
 __pycache__/
 *.pyc
-*.pyo
-
-# Python env
-.venv/
-venv/
-env/
 
 # OS
 .DS_Store
