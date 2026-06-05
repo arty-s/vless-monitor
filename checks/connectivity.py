@@ -12,9 +12,28 @@ class CheckResult:
     name: str
     ok: bool
     value: Optional[float] = None   # latency ms
-    message: str = ""
+    message: str = ""               # raw value, e.g. "45 мс"
+    comment: str = ""               # human-friendly explanation
     timestamp: float = field(default_factory=time.time)
     category: str = "general"      # ping | port | tunnel | dpi | stats
+
+
+def _ping_comment(ms: int, loss: int) -> str:
+    if loss >= 80:
+        return "Не отвечает — сервер недоступен или заблокирован"
+    if loss >= 30:
+        return f"Нестабильно — {loss}% пакетов теряется, возможны помехи"
+    if loss > 0:
+        return f"Небольшие потери ({loss}%) — связь в целом работает"
+    if ms < 30:
+        return "Отлично — связь очень быстрая"
+    if ms < 80:
+        return "Хорошо — связь нормальная"
+    if ms < 150:
+        return "Нормально — задержка заметная, но терпимая"
+    if ms < 300:
+        return "Медленно — высокая задержка, возможны тормоза"
+    return "Очень медленно — похоже на замедление провайдером"
 
 
 def tcp_probe(host: str, port: int, timeout: float = 5.0) -> CheckResult:
@@ -23,11 +42,19 @@ def tcp_probe(host: str, port: int, timeout: float = 5.0) -> CheckResult:
     try:
         with socket.create_connection((host, port), timeout=timeout):
             ms = (time.perf_counter() - t0) * 1000
-            return CheckResult(name=name, ok=True, value=round(ms, 1),
-                               message=f"{ms:.0f} мс", category="port")
-    except OSError as e:
-        return CheckResult(name=name, ok=False,
-                           message=str(e)[:60], category="port")
+            return CheckResult(
+                name=name, ok=True, value=round(ms, 1),
+                message=f"{ms:.0f} мс",
+                comment="Порт открыт — сервер принимает подключения",
+                category="port",
+            )
+    except OSError:
+        return CheckResult(
+            name=name, ok=False,
+            message="нет ответа",
+            comment="Порт закрыт или заблокирован — провайдер не пропускает соединение",
+            category="port",
+        )
 
 
 def ping_host(host: str, label: str) -> CheckResult:
@@ -47,10 +74,22 @@ def ping_host(host: str, label: str) -> CheckResult:
             ms = int(avg_m.group(1))
             ok = loss < 80
             msg = f"{ms} мс" + (f", {loss}% потерь" if loss > 0 else "")
-            return CheckResult(name=name, ok=ok, value=float(ms),
-                               message=msg, category="ping")
-        return CheckResult(name=name, ok=False,
-                           message=f"{loss}% потерь / недоступен", category="ping")
+            return CheckResult(
+                name=name, ok=ok, value=float(ms),
+                message=msg,
+                comment=_ping_comment(ms, loss),
+                category="ping",
+            )
+        return CheckResult(
+            name=name, ok=False,
+            message=f"{loss}% потерь",
+            comment="Не отвечает — адрес недоступен",
+            category="ping",
+        )
     except Exception as e:
-        return CheckResult(name=name, ok=False,
-                           message=str(e)[:50], category="ping")
+        return CheckResult(
+            name=name, ok=False,
+            message=str(e)[:50],
+            comment="Ошибка при проверке — возможно нет интернета",
+            category="ping",
+        )
