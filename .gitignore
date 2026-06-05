@@ -1,0 +1,27 @@
+# Personal config (contains your VLESS URI and secrets)
+config.json
+
+# xray binary (downloaded automatically on first run)
+xray/xray.exe
+xray/*.zip
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.pyc
+*.pyo
+
+# Python env
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

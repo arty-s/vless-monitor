@@ -1,0 +1,64 @@
+name: Build Windows EXE
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 requests PySocks pyinstaller
+
+      - name: Build EXE
+        run: python -m PyInstaller monitor.spec --clean --noconfirm
+
+      - name: Copy extra files to dist
+        run: |
+          copy config.example.json dist\VlessMonitor\
+          copy README.md dist\VlessMonitor\
+
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          Compress-Archive -Path VlessMonitor -DestinationPath VlessMonitor-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VlessMonitor-windows-x64
+          path: dist/VlessMonitor-windows-x64.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VlessMonitor-windows-x64.zip
+          generate_release_notes: true
+          body: |
+            ## VLESS Monitor ${{ github.ref_name }}
+
+            ### Установка
+            1. Скачайте `VlessMonitor-windows-x64.zip`
+            2. Распакуйте в любую папку
+            3. Запустите `VlessMonitor.exe`
+            4. Вставьте вашу VLESS-ссылку в настройках
+
+            ### Что нового
+            См. коммиты ниже.

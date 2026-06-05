@@ -1,0 +1,20 @@
+{
+    "vless_uri": "",
+    "local_socks5_port": 10808,
+    "check_interval_sec": 30,
+    "probe_server_port": 8765,
+    "probe_secret": "vless-monitor-secret-2026",
+    "dpi_probe_size_kb": 24,
+    "latency_ratio_threshold": 4.0,
+    "start_with_windows": false,
+    "notify_telegram": false,
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "ping_targets": {
+        "VPS": "1.1.1.1",
+        "Google DNS (8.8.8.8)": "8.8.8.8",
+        "Cloudflare (1.1.1.1)": "1.1.1.1",
+        "Яндекс RU (77.88.8.8)": "77.88.8.8",
+        "Ростелеком RU (212.188.1.6)": "212.188.1.6"
+    }
+}

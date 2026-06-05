@@ -1,0 +1,4 @@
+PyQt6>=6.6.0
+requests>=2.31.0
+requests[socks]
+PySocks>=1.7.1
