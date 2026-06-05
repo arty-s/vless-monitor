@@ -17,7 +17,10 @@ public class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
+        Logger.Start();
         _cfg = Config.Load();
+        Logger.Info($"Конфиг загружен: VLESS={(string.IsNullOrEmpty(_cfg.VlessUri) ? "<пусто>" : _cfg.VpsHost + ":" + _cfg.VlessPort)}, " +
+                    $"интервал={_cfg.CheckIntervalSec}с, DPI-проба={_cfg.DpiProbeSizeKb}КБ, порог={_cfg.LatencyRatioThreshold}×");
 
         // ── Ensure xray exists ──
         if (!XrayManager.XrayExists)
@@ -58,6 +61,7 @@ public class TrayApplicationContext : ApplicationContext
         menu.Items.Add("📊  Открыть статусы", null, (_, _) => OpenStatus());
         menu.Items.Add("⟳  Проверить сейчас", null, (_, _) => _checker.RunNow());
         menu.Items.Add("⚙  Настройки", null, (_, _) => OpenSettings());
+        menu.Items.Add("📁  Открыть папку логов", null, (_, _) => OpenLogsFolder());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("✕  Выход", null, (_, _) => ExitApp());
 
@@ -82,8 +86,20 @@ public class TrayApplicationContext : ApplicationContext
 
         // ── Start checker ──
         _checker = new Checker(_cfg);
+        _checker.XrayRunningProbe = () => _xray.IsRunning;
         _checker.StateChanged += OnStateChanged;
         _checker.Start();
+        Logger.Info("Мониторинг запущен.");
+    }
+
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(Logger.LogDir);
+            System.Diagnostics.Process.Start("explorer.exe", Logger.LogDir);
+        }
+        catch (Exception ex) { Logger.Error("Не удалось открыть папку логов", ex); }
     }
 
     private void OnStateChanged(MonitorState state)
@@ -152,6 +168,7 @@ public class TrayApplicationContext : ApplicationContext
         using var settings = new SettingsForm(_cfg);
         if (settings.ShowDialog() == DialogResult.OK)
         {
+            Logger.Info("Настройки изменены пользователем — применяю.");
             _cfg = settings.Result;
             _checker.Cfg = _cfg;
 
@@ -167,8 +184,10 @@ public class TrayApplicationContext : ApplicationContext
 
     private void ExitApp()
     {
+        Logger.Info("Выход по запросу пользователя.");
         try { _checker?.Stop(); } catch { }
         try { _xray?.Stop(); } catch { }
+        Logger.Stop();
         if (_tray != null) _tray.Visible = false;
         ExitThread();
     }

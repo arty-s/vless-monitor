@@ -117,11 +117,19 @@ public class XrayManager
                 };
                 _process.Start();
                 Thread.Sleep(800); // let it bind the port
-                if (_process.HasExited) return false;
+                if (_process.HasExited)
+                {
+                    Logger.Error($"xray завершился сразу после старта (код {_process.ExitCode}). " +
+                                 "Вероятно неверная VLESS-ссылка или занят порт.");
+                    return false;
+                }
+                Logger.Info($"xray запущен (PID {_process.Id}), SOCKS5 на 127.0.0.1:{SocksPort}, " +
+                            $"VLESS {Vless.Host}:{Vless.Port} (security={Vless.Security}, sni={Vless.Sni})");
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Error("Не удалось запустить xray", ex);
                 return false;
             }
         }
@@ -152,6 +160,7 @@ public class XrayManager
 
     public bool Restart()
     {
+        Logger.Info("Перезапуск xray...");
         Stop();
         Thread.Sleep(400);
         return Start();

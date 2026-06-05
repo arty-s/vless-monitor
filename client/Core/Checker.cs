@@ -21,6 +21,10 @@ public class Checker
     public Config Cfg;
     public event Action<MonitorState>? StateChanged;
 
+    /// <summary>Optional probe so logs can record whether xray is alive each cycle.</summary>
+    public Func<bool>? XrayRunningProbe { set { _xrayRunning = value; } }
+    private Func<bool>? _xrayRunning;
+
     private MonitorState _state = new();
     private readonly object _lock = new();
     private CancellationTokenSource? _cts;
@@ -38,16 +42,22 @@ public class Checker
 
     public void Stop() => _cts?.Cancel();
 
-    public void RunNow() => _ = Task.Run(RunAllAsync);
+    public void RunNow() => _ = Task.Run(SafeRunAsync);
+
+    private async Task SafeRunAsync()
+    {
+        try { await RunAllAsync(); }
+        catch (Exception ex) { Logger.Error("Сбой в цикле проверок", ex); }
+    }
 
     private async Task LoopAsync(CancellationToken ct)
     {
-        await RunAllAsync();
+        await SafeRunAsync();
         while (!ct.IsCancellationRequested)
         {
             try { await Task.Delay(TimeSpan.FromSeconds(Cfg.CheckIntervalSec), ct); }
             catch (TaskCanceledException) { break; }
-            if (!ct.IsCancellationRequested) await RunAllAsync();
+            if (!ct.IsCancellationRequested) await SafeRunAsync();
         }
     }
 
@@ -57,6 +67,10 @@ public class Checker
         var vps = cfg.VpsHost;
         var results = new Dictionary<string, CheckResult>();
         _cycle++;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Logger.Info($"───── Цикл #{_cycle} начат ───── VPS={vps} VLESS-порт={cfg.VlessPort} " +
+                    $"SOCKS5={cfg.LocalSocks5Port} xray-запущен={(_xrayRunning?.Invoke() ?? false)}");
 
         // ── Pings (parallel) ──
         var pingTasks = cfg.PingTargets
@@ -102,6 +116,19 @@ public class Checker
         }
 
         var (overall, diagnosis) = Classify(results, cfg);
+        sw.Stop();
+
+        // ── Per-cycle summary block (the part you hand off for analysis) ──
+        Logger.Info($"Результаты цикла #{_cycle} (за {sw.ElapsedMilliseconds} мс):");
+        foreach (var r in results.Values
+                     .OrderBy(x => x.Category)
+                     .ThenBy(x => x.Name))
+        {
+            var mark = r.Ok ? "OK  " : "FAIL";
+            var val = r.Value.HasValue ? $" value={r.Value}" : "";
+            Logger.Info($"    [{mark}] {r.Category,-7} | {r.Name} | {r.Message}{val} | {r.Comment}");
+        }
+        Logger.Info($"ИТОГ цикла #{_cycle}: {overall.ToString().ToUpper()} — {diagnosis.Replace("\n", " / ")}");
 
         var snapshot = new MonitorState
         {
