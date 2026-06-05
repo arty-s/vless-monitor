@@ -33,7 +33,7 @@ Windows tray application for monitoring VLESS proxy connectivity and detecting I
 **Requirements:** Python 3.11+, Windows 10/11
 
 ```bat
-git clone https://github.com/YOUR_USERNAME/vless-monitor
+git clone https://github.com/arty-s/vless-monitor
 cd vless-monitor
 pip install PyQt6 requests PySocks
 python monitor.py
