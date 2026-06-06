@@ -41,6 +41,12 @@ public class Config
     [JsonPropertyName("install_id")]
     public string InstallId { get; set; } = "";
 
+    // Main window bounds (E5) — -1 means "not set yet".
+    [JsonPropertyName("win_x")] public int WinX { get; set; } = -1;
+    [JsonPropertyName("win_y")] public int WinY { get; set; } = -1;
+    [JsonPropertyName("win_w")] public int WinW { get; set; } = -1;
+    [JsonPropertyName("win_h")] public int WinH { get; set; } = -1;
+
     [JsonPropertyName("notify_telegram")]
     public bool NotifyTelegram { get; set; } = false;
 

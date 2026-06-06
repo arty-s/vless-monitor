@@ -12,7 +12,7 @@ public class TrayApplicationContext : ApplicationContext
     private Config _cfg;
     private Checker _checker = null!;
     private XrayManager _xray = null!;
-    private StatusForm? _statusForm;
+    private MonitorWindow? _statusForm;
     private OverallStatus _lastStatus = OverallStatus.Unknown;
 
     public TrayApplicationContext()
@@ -21,6 +21,7 @@ public class TrayApplicationContext : ApplicationContext
         Theme.Refresh();
         _cfg = Config.Load();
         Logger.MinLevel = _cfg.VerboseLog ? LogLevel.Debug : LogLevel.Info;
+        MetricsStore.Instance.Configure(_cfg.StoreHistory);
         Logger.Info($"Конфиг загружен: VLESS={(string.IsNullOrEmpty(_cfg.VlessUri) ? "<пусто>" : _cfg.VpsHost + ":" + _cfg.VlessPort)}, " +
                     $"интервал={_cfg.CheckIntervalSec}с, DPI-проба={_cfg.DpiProbeSizeKb}КБ, порог={_cfg.LatencyRatioThreshold}×");
 
@@ -164,9 +165,10 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_statusForm == null || _statusForm.IsDisposed)
         {
-            _statusForm = new StatusForm();
+            _statusForm = new MonitorWindow(_cfg);
             _statusForm.RefreshRequested += () => _checker.RunNow();
             _statusForm.SettingsRequested += OpenSettings;
+            _statusForm.DiagnosticsRequested += OpenDiagnostics;
             _statusForm.UpdateState(_checker.State);
         }
         _statusForm.ShowAndFocus();

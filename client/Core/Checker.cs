@@ -123,6 +123,9 @@ public class Checker
         var (overall, diagnosis) = Classify(results, cfg);
         sw.Stop();
 
+        // Feed the metric history (for the dashboard graphs).
+        MetricsStore.Instance.Record(results.Values);
+
         // ── Per-cycle summary block (the part you hand off for analysis) ──
         Logger.Info($"Результаты цикла #{_cycle} (за {sw.ElapsedMilliseconds} мс):");
         foreach (var r in results.Values
