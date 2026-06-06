@@ -64,6 +64,7 @@ public class TrayApplicationContext : ApplicationContext
         menu.Items.Add("📊  Открыть статусы", null, (_, _) => OpenStatus());
         menu.Items.Add("⟳  Проверить сейчас", null, (_, _) => _checker.RunNow());
         menu.Items.Add("⚙  Настройки", null, (_, _) => OpenSettings());
+        menu.Items.Add("🩺  Собрать диагностику", null, (_, _) => OpenDiagnostics());
         menu.Items.Add("📁  Открыть папку логов", null, (_, _) => OpenLogsFolder());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("✕  Выход", null, (_, _) => ExitApp());
@@ -93,6 +94,12 @@ public class TrayApplicationContext : ApplicationContext
         _checker.StateChanged += OnStateChanged;
         _checker.Start();
         Logger.Info("Мониторинг запущен.");
+    }
+
+    private void OpenDiagnostics()
+    {
+        using var dlg = new DiagnosticsForm(_cfg, _checker?.State);
+        dlg.ShowDialog();
     }
 
     private void OpenLogsFolder()

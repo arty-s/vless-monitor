@@ -38,6 +38,9 @@ public class Config
     [JsonPropertyName("verbose_log")]
     public bool VerboseLog { get; set; } = false;
 
+    [JsonPropertyName("install_id")]
+    public string InstallId { get; set; } = "";
+
     [JsonPropertyName("notify_telegram")]
     public bool NotifyTelegram { get; set; } = false;
 
@@ -108,5 +111,16 @@ public class Config
     {
         var json = JsonSerializer.Serialize(this, JsonOpts);
         File.WriteAllText(ConfigPath, json);
+    }
+
+    /// <summary>Anonymous per-install id (generated once) — distinguishes reports from different users.</summary>
+    public string EnsureInstallId()
+    {
+        if (string.IsNullOrEmpty(InstallId))
+        {
+            InstallId = Guid.NewGuid().ToString("N")[..12];
+            try { Save(); } catch { }
+        }
+        return InstallId;
     }
 }
