@@ -25,7 +25,7 @@ public static class Tunnel
 
     public static async Task<CheckResult> CheckHttpDirectAsync(string vps, int port, string secret)
     {
-        const string name = "Probe-сервер (прямое соединение)";
+        const string name = "Probe-сервер (доп. диагностика)";
         var sw = Stopwatch.StartNew();
         try
         {
@@ -36,20 +36,20 @@ public static class Tunnel
 
             if (resp.IsSuccessStatusCode)
                 return Ok(name, sw.ElapsedMilliseconds,
-                    "Сервер отвечает напрямую — VPS живой и доступен", CheckCategory.Tunnel);
+                    "Probe-сервер отвечает — расширенная диагностика доступна", CheckCategory.Stats);
 
             return Fail(name, $"HTTP {(int)resp.StatusCode}",
-                "Сервер ответил с ошибкой — что-то не так на стороне VPS", CheckCategory.Tunnel);
+                "Probe-сервер ответил с ошибкой (на работу VLESS не влияет)", CheckCategory.Stats);
         }
         catch (TaskCanceledException)
         {
             return Fail(name, "таймаут",
-                "VPS не отвечает — возможно перегружен или недоступен", CheckCategory.Tunnel);
+                "Probe-сервер не отвечает — это необязательный компонент, на туннель не влияет", CheckCategory.Stats);
         }
         catch
         {
             return Fail(name, "нет соединения",
-                "Probe-сервер не запущен или порт не открыт на VPS", CheckCategory.Tunnel);
+                "Probe-сервер не запущен (необязателен) — без него нет только E2E-маяка и статистики", CheckCategory.Stats);
         }
     }
 
@@ -107,34 +107,78 @@ public static class Tunnel
             "Запрос ушёл, но до сервера не добрался — DPI режет трафик на полпути", CheckCategory.Tunnel);
     }
 
+    // Several lightweight "no content" endpoints; success = any one responds.
+    private static readonly string[] ConnectivityUrls =
+    {
+        "http://cp.cloudflare.com/",        // 204
+        "http://www.gstatic.com/generate_204",
+        "http://detectportal.firefox.com/success.txt",
+    };
+
     public static async Task<CheckResult> CheckExternalHttpAsync(string proxyUrl)
     {
         const string name = "Интернет через туннель";
-        var sw = Stopwatch.StartNew();
+        string lastErr = "таймаут";
+
+        foreach (var url in ConnectivityUrls)
+        {
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                using var client = MakeClient(proxyUrl, TimeSpan.FromSeconds(12));
+                var resp = await client.GetAsync(url);
+                sw.Stop();
+                // 2xx (incl. 204) means traffic flows through the tunnel.
+                if ((int)resp.StatusCode is >= 200 and < 300)
+                {
+                    var ms = sw.ElapsedMilliseconds;
+                    var speed = ms < 400 ? "быстро" : ms < 1000 ? "нормально" : "медленно";
+                    return Ok(name, ms, $"Интернет через туннель работает ({speed})", CheckCategory.Tunnel);
+                }
+                lastErr = $"HTTP {(int)resp.StatusCode}";
+            }
+            catch (TaskCanceledException) { lastErr = "таймаут"; }
+            catch (HttpRequestException) { lastErr = "ошибка прокси"; }
+            catch (Exception ex) { lastErr = ex.GetType().Name; }
+            // try next endpoint before giving up
+        }
+
+        return Fail(name, lastErr,
+            "Интернет через туннель не работает — проверьте xray, возможно DPI блокирует VLESS",
+            CheckCategory.Tunnel);
+    }
+
+    /// <summary>
+    /// Local xray health — always available, independent of the probe server.
+    /// Confirms the xray process is alive and its SOCKS5 port accepts connections.
+    /// </summary>
+    public static async Task<CheckResult> CheckXrayLocalAsync(bool processAlive, int socksPort)
+    {
+        const string name = "Локальный клиент xray";
+        if (!processAlive)
+            return Fail(name, "не запущен",
+                "xray не работает — туннель не поднят. Проверьте VLESS-ссылку в настройках",
+                CheckCategory.Tunnel);
+
+        // SOCKS5 port reachable?
         try
         {
-            using var client = MakeClient(proxyUrl, TimeSpan.FromSeconds(8));
-            var resp = await client.GetAsync("http://cp.cloudflare.com/");
-            sw.Stop();
-            if (resp.IsSuccessStatusCode)
-            {
-                var ms = sw.ElapsedMilliseconds;
-                var speed = ms < 300 ? "быстро" : ms < 800 ? "нормально" : "медленно";
-                return Ok(name, ms, $"Интернет через туннель работает ({speed})", CheckCategory.Tunnel);
-            }
-            return Fail(name, $"HTTP {(int)resp.StatusCode}",
-                "Туннель работает, но сайт ответил ошибкой — временная проблема", CheckCategory.Tunnel);
+            using var c = new System.Net.Sockets.TcpClient();
+            var connect = c.ConnectAsync("127.0.0.1", socksPort);
+            if (await Task.WhenAny(connect, Task.Delay(2000)) == connect && c.Connected)
+                return new CheckResult
+                {
+                    Name = name, Ok = true,
+                    Message = $"PID активен, SOCKS5 :{socksPort}",
+                    Comment = "xray работает — туннель поднят, локальный прокси слушает",
+                    Category = CheckCategory.Tunnel,
+                };
         }
-        catch (TaskCanceledException)
-        {
-            return Fail(name, "таймаут",
-                "Интернет через туннель не работает — возможно DPI блокирует VLESS", CheckCategory.Tunnel);
-        }
-        catch
-        {
-            return Fail(name, "ошибка прокси",
-                "xray не запущен — локальный SOCKS5 прокси не отвечает", CheckCategory.Tunnel);
-        }
+        catch { /* fall through */ }
+
+        return Fail(name, $"SOCKS5 :{socksPort} молчит",
+            "xray запущен, но локальный прокси не отвечает — туннель ещё поднимается или сбой",
+            CheckCategory.Tunnel);
     }
 
     public static async Task<CheckResult> CheckDpiFreezeAsync(

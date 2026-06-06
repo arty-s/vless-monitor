@@ -11,7 +11,7 @@ import time
 import threading
 import urllib.request
 from collections import deque
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 SECRET = "vless-monitor-secret-2026"
 MAX_BEACONS = 200
@@ -157,8 +157,12 @@ def main():
 
     SECRET = args.secret
 
-    server = HTTPServer(("0.0.0.0", args.port), Handler)
-    print(f"Probe server listening on 0.0.0.0:{args.port}")
+    # ThreadingHTTPServer: each request in its own thread, so a slow /stream
+    # request can't block health/beacon checks (the bug that caused timeouts).
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
+    server.daemon_threads = True
+    server.request_queue_size = 64
+    print(f"Probe server listening on 0.0.0.0:{args.port} (threaded)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

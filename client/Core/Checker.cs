@@ -87,13 +87,18 @@ public class Checker
         Add(results, tcpVless.Result);
         Add(results, tcpProbe.Result);
 
-        // ── Probe server direct ──
-        var direct = await Tunnel.CheckHttpDirectAsync(vps, cfg.ProbeServerPort, cfg.ProbeSecret);
-        Add(results, direct);
+        // ── Local xray status — ALWAYS shown, independent of probe server ──
+        var xrayLocal = await Tunnel.CheckXrayLocalAsync(
+            _xrayRunning?.Invoke() ?? false, cfg.LocalSocks5Port);
+        Add(results, xrayLocal);
 
-        // ── External HTTP through tunnel ──
+        // ── External HTTP through tunnel (the real tunnel-health signal) ──
         var ext = await Tunnel.CheckExternalHttpAsync(cfg.ProxyUrl);
         Add(results, ext);
+
+        // ── Probe server direct (optional infrastructure) ──
+        var direct = await Tunnel.CheckHttpDirectAsync(vps, cfg.ProbeServerPort, cfg.ProbeSecret);
+        Add(results, direct);
 
         // ── Tunnel checks (only if probe server reachable) ──
         if (direct.Ok)
@@ -152,9 +157,11 @@ public class Checker
         var vpsPingName = cfg.PingTargets.FirstOrDefault(kv => kv.Value == cfg.VpsHost).Key;
         bool vpsUp = vpsPingName != null && OkOf(vpsPingName);
 
-        bool directOk = OkOf("Probe-сервер (прямое соединение)");
-        var e2e = Get("Туннель — сквозная проверка");
+        // Real tunnel-health signals (do NOT depend on the optional probe server).
+        var xrayLocal = Get("Локальный клиент xray");
         var ext = Get("Интернет через туннель");
+
+        // Probe-server-dependent diagnostics — optional, never drive a "broken" verdict.
         var dpi = Get("DPI: тест на заморозку 16 КБ");
         var ratio = Get("DPI: соотношение задержек");
 
@@ -170,7 +177,7 @@ public class Checker
 
         var issues = new List<string>();
 
-        // ── RED ──
+        // ── RED: no internet / upstream / VPS / port / xray down ──
         if (!intlOk && !ruOk)
             return (OverallStatus.Red, "Нет интернета — не пингуются ни российские, ни зарубежные адреса");
         if (!intlOk && ruOk)
@@ -178,19 +185,20 @@ public class Checker
                 "Зарубежные адреса недоступны, российские работают — похоже упал аплинк провайдера");
 
         var vlessTcp = Get($"Порт VLESS ({cfg.VlessPort})");
-        if (vlessTcp is { Ok: false } && !directOk && !vpsUp)
-            return (OverallStatus.Red, $"VPS недоступен — ни порт VLESS, ни ping не отвечают");
+        if (vlessTcp is { Ok: false } && !vpsUp)
+            return (OverallStatus.Red, "VPS недоступен — ни порт VLESS, ни ping не отвечают");
         if (vlessTcp is { Ok: false })
-            issues.Add($"Порт VLESS {cfg.VlessPort} закрыт — провайдер блокирует подключение к серверу");
+            return (OverallStatus.Red,
+                $"Порт VLESS {cfg.VlessPort} закрыт — провайдер блокирует подключение к серверу");
 
-        if (issues.Count > 0)
-            return (OverallStatus.Red, string.Join("\n", issues));
+        if (xrayLocal is { Ok: false })
+            return (OverallStatus.Red, xrayLocal.Comment);
 
-        // ── YELLOW ──
-        if (ext is { Ok: false } && (vpsUp || directOk))
-            issues.Add(e2e is { Ok: false }
-                ? "Туннель не работает, хотя VPS доступен напрямую — DPI режет VLESS-трафик"
-                : "Интернет через туннель не работает");
+        // ── YELLOW: tunnel routes nothing, or DPI throttling detected ──
+        // The decisive tunnel signal is "internet through tunnel".
+        if (ext is { Ok: false })
+            issues.Add("Интернет через туннель не работает — VLESS поднят, но трафик не проходит "
+                       + "(возможно DPI режет соединение)");
 
         if (dpi is { Ok: false })
             issues.Add(dpi.Comment);
