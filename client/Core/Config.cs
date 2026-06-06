@@ -32,6 +32,12 @@ public class Config
     [JsonPropertyName("start_with_windows")]
     public bool StartWithWindows { get; set; } = false;
 
+    [JsonPropertyName("store_history")]
+    public bool StoreHistory { get; set; } = true;
+
+    [JsonPropertyName("verbose_log")]
+    public bool VerboseLog { get; set; } = false;
+
     [JsonPropertyName("notify_telegram")]
     public bool NotifyTelegram { get; set; } = false;
 

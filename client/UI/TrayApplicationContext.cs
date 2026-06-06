@@ -20,6 +20,7 @@ public class TrayApplicationContext : ApplicationContext
         Logger.Start();
         Theme.Refresh();
         _cfg = Config.Load();
+        Logger.MinLevel = _cfg.VerboseLog ? LogLevel.Debug : LogLevel.Info;
         Logger.Info($"Конфиг загружен: VLESS={(string.IsNullOrEmpty(_cfg.VlessUri) ? "<пусто>" : _cfg.VpsHost + ":" + _cfg.VlessPort)}, " +
                     $"интервал={_cfg.CheckIntervalSec}с, DPI-проба={_cfg.DpiProbeSizeKb}КБ, порог={_cfg.LatencyRatioThreshold}×");
 
@@ -172,6 +173,7 @@ public class TrayApplicationContext : ApplicationContext
         {
             Logger.Info("Настройки изменены пользователем — применяю.");
             _cfg = settings.Result;
+            Logger.MinLevel = _cfg.VerboseLog ? LogLevel.Debug : LogLevel.Info;
             _checker.Cfg = _cfg;
 
             // Restart xray with new VLESS / port

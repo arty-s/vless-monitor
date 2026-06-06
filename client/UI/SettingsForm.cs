@@ -19,6 +19,8 @@ public class SettingsForm : Form
     private readonly TextBox _tgToken;
     private readonly TextBox _tgChat;
     private readonly CheckBox _autostart;
+    private readonly CheckBox _storeHistory;
+    private readonly CheckBox _verboseLog;
 
     public Config Result => _cfg;
 
@@ -28,8 +30,8 @@ public class SettingsForm : Form
         Text = firstRun
             ? "VLESS Monitor — первый запуск: вставьте VLESS-ссылку"
             : "Настройки — VLESS Monitor";
-        Size = new Size(640, 560);
-        MinimumSize = new Size(600, 520);
+        Size = new Size(780, 640);
+        MinimumSize = new Size(720, 560);
         StartPosition = FormStartPosition.CenterScreen;
         Theme.Refresh();
         BackColor = Theme.Bg;
@@ -52,37 +54,52 @@ public class SettingsForm : Form
         // ── VLESS group ──
         var grpVless = MakeGroup("VLESS подключение", out var glVless);
         _uri = MakeText("vless://UUID@host:port?...");
-        AddRow(glVless, "VLESS-ссылка:", _uri);
+        AddRow(glVless, "VLESS-ссылка:", _uri,
+            "Ссылка вашего прокси из панели x-ui / клиента. Из неё берётся адрес сервера и параметры туннеля.");
         _port = MakeNum(1024, 65535, 1);
-        AddRow(glVless, "Локальный SOCKS5 порт:", _port);
+        AddRow(glVless, "Локальный SOCKS5 порт:", _port,
+            "Порт на вашем ПК, который поднимает встроенный xray. Меняйте, только если 10808 уже занят другой программой.");
         root.Controls.Add(grpVless);
 
-        // ── Checks group ──
+        // ── General checks group ──
         var grpChk = MakeGroup("Параметры проверок", out var glChk);
         _interval = MakeNum(10, 3600, 5); _interval.Value = 30;
-        AddRow(glChk, "Интервал проверки (сек):", _interval);
-        _dpiKb = MakeNum(8, 256, 4); _dpiKb.Value = 24;
-        AddRow(glChk, "Размер DPI-теста (КБ):", _dpiKb);
-        _ratio = MakeNum(2, 20, 1); _ratio.Value = 4;
-        AddRow(glChk, "Порог замедления (×):", _ratio);
+        AddRow(glChk, "Интервал проверки (сек):", _interval,
+            "Как часто опрашивать сервер и туннель. Меньше — быстрее заметит проблему, но чуть больше трафика и нагрузки.");
+        _storeHistory = MakeCheck("Хранить историю проверок");
+        AddCheckRow(glChk, _storeHistory,
+            "Сохранять историю на диск (папка logs), чтобы графики оставались после перезапуска. Выключено — история только в памяти.");
         root.Controls.Add(grpChk);
+
+        // ── DPI params group ──
+        var grpDpi = MakeGroup("Параметры DPI — блокировки и замедления", out var glDpi);
+        _dpiKb = MakeNum(8, 256, 4); _dpiKb.Value = 24;
+        AddRow(glDpi, "Размер DPI-теста (КБ):", _dpiKb,
+            "Сколько данных качать через туннель в тесте на заморозку. РКН рвёт соединение после ~16 КБ — тест должен быть больше, поэтому 24.");
+        _ratio = MakeNum(2, 20, 1); _ratio.Value = 4;
+        AddRow(glDpi, "Порог замедления (×):", _ratio,
+            "Во сколько раз туннель может быть медленнее прямого соединения, прежде чем счесть это замедлением (throttling). 4 — разумный дефолт.");
+        root.Controls.Add(grpDpi);
 
         // ── Telegram group ──
         var grpTg = MakeGroup("Уведомления Telegram (необязательно)", out var glTg);
         _tgEnable = MakeCheck("Включить уведомления");
-        glTg.Controls.Add(_tgEnable, 0, glTg.RowCount); glTg.SetColumnSpan(_tgEnable, 2);
-        glTg.RowCount++;
+        AddCheckRow(glTg, _tgEnable,
+            "Присылать в Telegram сообщение при смене статуса (например, когда туннель упал).");
         _tgToken = MakeText("123456:ABC...");
-        AddRow(glTg, "Bot token:", _tgToken);
+        AddRow(glTg, "Bot token:", _tgToken, "Токен бота от @BotFather.");
         _tgChat = MakeText("-100...");
-        AddRow(glTg, "Chat ID:", _tgChat);
+        AddRow(glTg, "Chat ID:", _tgChat, "ID чата или канала, куда слать уведомления.");
         root.Controls.Add(grpTg);
 
         // ── System group ──
         var grpSys = MakeGroup("Система", out var glSys);
         _autostart = MakeCheck("Запускать вместе с Windows");
-        glSys.Controls.Add(_autostart, 0, 0); glSys.SetColumnSpan(_autostart, 2);
-        glSys.RowCount++;
+        AddCheckRow(glSys, _autostart,
+            "Стартовать свёрнутым в трей при входе в Windows.");
+        _verboseLog = MakeCheck("Подробный лог (debug)");
+        AddCheckRow(glSys, _verboseLog,
+            "Писать в лог расширенную отладку, включая вывод xray. Включайте, когда нужно воспроизвести проблему для отчёта.");
         root.Controls.Add(grpSys);
 
         // ── Buttons ──
@@ -137,6 +154,8 @@ public class SettingsForm : Form
         _tgToken.Text = _cfg.TelegramBotToken;
         _tgChat.Text = _cfg.TelegramChatId;
         _autostart.Checked = IsAutostartSet();
+        _storeHistory.Checked = _cfg.StoreHistory;
+        _verboseLog.Checked = _cfg.VerboseLog;
     }
 
     private static decimal Clamp(int v, NumericUpDown n) =>
@@ -167,6 +186,8 @@ public class SettingsForm : Form
         _cfg.TelegramBotToken = _tgToken.Text.Trim();
         _cfg.TelegramChatId = _tgChat.Text.Trim();
         _cfg.StartWithWindows = _autostart.Checked;
+        _cfg.StoreHistory = _storeHistory.Checked;
+        _cfg.VerboseLog = _verboseLog.Checked;
 
         try { _cfg.Save(); }
         catch (Exception ex)
@@ -229,31 +250,54 @@ public class SettingsForm : Form
         layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = 3,
             AutoSize = true,
             BackColor = Theme.Bg,
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180)); // label
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200)); // field
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));  // hint
         grp.Controls.Add(layout);
         return grp;
     }
 
-    private void AddRow(TableLayoutPanel layout, string label, Control field)
+    private void AddRow(TableLayoutPanel layout, string label, Control field, string? hint = null)
     {
         int row = layout.RowCount;
         var lbl = new Label
         {
             Text = label, ForeColor = Theme.Fg,
-            Font = new Font(Theme.FontFamily, 9.5f),
+            Font = new Font(Theme.UiFont, 9.5f),
             TextAlign = ContentAlignment.MiddleLeft,
             Anchor = AnchorStyles.Left, AutoSize = true,
             Margin = new Padding(0, 8, 8, 4),
         };
         layout.Controls.Add(lbl, 0, row);
         layout.Controls.Add(field, 1, row);
+        if (hint != null) layout.Controls.Add(MakeHint(hint), 2, row);
         layout.RowCount++;
     }
+
+    /// <summary>A checkbox row: checkbox in the field column, hint on the right.</summary>
+    private void AddCheckRow(TableLayoutPanel layout, CheckBox box, string hint)
+    {
+        int row = layout.RowCount;
+        layout.Controls.Add(new Label { AutoSize = true, Margin = new Padding(0) }, 0, row);
+        layout.Controls.Add(box, 1, row);
+        layout.Controls.Add(MakeHint(hint), 2, row);
+        layout.RowCount++;
+    }
+
+    private Label MakeHint(string text) => new()
+    {
+        Text = text,
+        ForeColor = Theme.FgDim,
+        Font = new Font(Theme.UiFont, 8.5f),
+        AutoSize = true,
+        MaximumSize = new Size(340, 0),  // wrap at ~340px, grow vertically
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(12, 6, 0, 4),
+    };
 
     private TextBox MakeText(string placeholder) => new()
     {

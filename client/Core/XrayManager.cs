@@ -145,14 +145,29 @@ public class XrayManager
                         CreateNoWindow = true,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
-                    }
+                    },
+                    EnableRaisingEvents = true,
                 };
+
+                // D4: capture xray output to the log — xray prints the exact
+                // reason on a bad VLESS link / port conflict, which is the most
+                // valuable signal when diagnosing other people's setups.
+                _process.OutputDataReceived += (_, e) =>
+                    { if (e.Data != null) Logger.Debug($"xray: {e.Data}"); };
+                _process.ErrorDataReceived += (_, e) =>
+                    { if (e.Data != null) Logger.Warn($"xray: {e.Data}"); };
+                _process.Exited += (_, _) =>
+                    { try { Logger.Warn($"xray процесс завершился (код {_process?.ExitCode})"); } catch { } };
+
                 _process.Start();
+                _process.BeginOutputReadLine();
+                _process.BeginErrorReadLine();
+
                 Thread.Sleep(800); // let it bind the port
                 if (_process.HasExited)
                 {
                     Logger.Error($"xray завершился сразу после старта (код {_process.ExitCode}). " +
-                                 "Вероятно неверная VLESS-ссылка или занят порт.");
+                                 "Вероятно неверная VLESS-ссылка или занят порт — подробности в строках 'xray:' выше.");
                     return false;
                 }
                 Logger.Info($"xray запущен (PID {_process.Id}), SOCKS5 на 127.0.0.1:{SocksPort}, " +
