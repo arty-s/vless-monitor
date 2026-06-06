@@ -22,9 +22,10 @@ public class TrayApplicationContext : ApplicationContext
         Logger.Info($"Конфиг загружен: VLESS={(string.IsNullOrEmpty(_cfg.VlessUri) ? "<пусто>" : _cfg.VpsHost + ":" + _cfg.VlessPort)}, " +
                     $"интервал={_cfg.CheckIntervalSec}с, DPI-проба={_cfg.DpiProbeSizeKb}КБ, порог={_cfg.LatencyRatioThreshold}×");
 
-        // ── Ensure xray exists ──
-        if (!XrayManager.XrayExists)
+        // ── Ensure xray exists: embedded resource first, download as fallback ──
+        if (!XrayManager.XrayExists && !XrayManager.EnsureFromEmbedded())
         {
+            Logger.Warn("Встроенный xray.exe не найден — предлагаю скачать.");
             using var dlg = new DownloadForm();
             if (dlg.ShowDialog() != DialogResult.OK || !dlg.Success)
             {

@@ -21,6 +21,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Fetch xray-core for embedding
+        run: |
+          New-Item -ItemType Directory -Force client\runtime | Out-Null
+          $url = "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip"
+          Invoke-WebRequest -Uri $url -OutFile xray.zip
+          Expand-Archive xray.zip -DestinationPath xray-tmp -Force
+          Copy-Item xray-tmp\xray.exe client\runtime\xray.exe
+          Write-Host "Embedded xray.exe: $((Get-Item client\runtime\xray.exe).Length / 1MB) MB"
+
       - name: Publish single-file self-contained exe
         run: dotnet publish client/VlessMonitor.csproj -c Release -o publish
 
@@ -50,13 +59,12 @@ jobs:
           body: |
             ## VLESS Monitor ${{ github.ref_name }}
 
-            Нативное Windows-приложение (.NET 8, WinForms). **Не требует установки Python или .NET** — всё внутри exe.
+            Нативное Windows-приложение (.NET 8, WinForms). **Не требует установки Python или .NET, ничего не качает при запуске** — xray-core встроен внутрь exe.
 
             ### Установка
             1. Скачайте `VlessMonitor-windows-x64.zip`
             2. Распакуйте в любую папку
             3. Запустите `VlessMonitor.exe`
             4. Вставьте вашу VLESS-ссылку в окне настроек
-            5. xray-core (~15 МБ) скачается автоматически при первом запуске
 
-            Иконка появится в системном трее (правый нижний угол).
+            xray-core распакуется из самого exe при первом запуске — доступ к GitHub не нужен. Иконка появится в системном трее.

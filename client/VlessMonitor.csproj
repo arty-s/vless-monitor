@@ -9,7 +9,7 @@
     <AssemblyName>VlessMonitor</AssemblyName>
     <RootNamespace>VlessMonitor</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Product>VLESS Monitor</Product>
     <Company>vless-monitor</Company>
 
@@ -22,5 +22,17 @@
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <!--
+    Embed xray.exe directly into the assembly so the app ships as one file
+    and never needs to reach GitHub at runtime. The binary is placed at
+    runtime/xray.exe by CI (or locally) before build; if absent, the build
+    still succeeds and the app falls back to downloading xray on first run.
+  -->
+  <ItemGroup Condition="Exists('runtime\xray.exe')">
+    <EmbeddedResource Include="runtime\xray.exe">
+      <LogicalName>xray.exe</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
 </Project>

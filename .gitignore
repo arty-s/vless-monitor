@@ -2,9 +2,10 @@
 config.json
 client/config.json
 
-# xray binary (downloaded automatically on first run)
+# xray binary (downloaded on first run, or fetched by CI for embedding)
 xray/
 client/xray/
+client/runtime/
 *.zip
 
 # .NET build output

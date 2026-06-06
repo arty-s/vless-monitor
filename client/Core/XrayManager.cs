@@ -35,6 +35,38 @@ public class XrayManager
 
     public static bool XrayExists => File.Exists(XrayExe);
 
+    /// <summary>
+    /// Ensures xray.exe is on disk: extracts the embedded copy if present,
+    /// otherwise leaves it to the caller to download. Returns true if available.
+    /// </summary>
+    public static bool EnsureFromEmbedded()
+    {
+        if (XrayExists) return true;
+        try
+        {
+            var asm = typeof(XrayManager).Assembly;
+            // Embedded as logical name "xray.exe"
+            var resName = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith("xray.exe", StringComparison.OrdinalIgnoreCase));
+            if (resName == null) return false;
+
+            using var stream = asm.GetManifestResourceStream(resName);
+            if (stream == null) return false;
+
+            Directory.CreateDirectory(XrayDir);
+            using (var file = File.Create(XrayExe))
+                stream.CopyTo(file);
+
+            Logger.Info($"xray.exe извлечён из встроенного ресурса ({new FileInfo(XrayExe).Length / 1024} КБ)");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Не удалось извлечь встроенный xray.exe", ex);
+            return false;
+        }
+    }
+
     /// <summary>Download and extract xray.exe. Reports progress via callback.</summary>
     public static async Task<bool> DownloadXrayAsync(Action<string> progress)
     {
