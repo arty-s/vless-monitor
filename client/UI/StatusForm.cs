@@ -4,15 +4,23 @@ using VlessMonitor.Checks;
 namespace VlessMonitor.UI;
 
 /// <summary>
-/// Detailed status window: every check shown with a plain-language comment.
+/// Fluent 2 status dashboard. Rows are persistent and update in place —
+/// no full redraw on each cycle, so there is no flicker.
 /// </summary>
 public class StatusForm : Form
 {
+    private readonly BufferedPanel _header;
     private readonly Label _statusLabel;
     private readonly Label _timeLabel;
+    private readonly BufferedPanel _list;
     private readonly Label _diagLabel;
-    private readonly Panel _listPanel;
+    private readonly FluentButton _btnRefresh;
+    private readonly FluentButton _btnSettings;
     private readonly System.Windows.Forms.Timer _ageTimer;
+
+    private readonly Dictionary<string, CheckRowControl> _rows = new();
+    private readonly List<Control> _layoutControls = new();
+    private string _layoutKey = "";
     private DateTime _lastUpdate = DateTime.MinValue;
 
     public event Action? RefreshRequested;
@@ -20,10 +28,10 @@ public class StatusForm : Form
 
     private static readonly Dictionary<CheckCategory, string> CatLabel = new()
     {
-        [CheckCategory.Ping]   = "ПИНГИ — доступность серверов",
-        [CheckCategory.Port]   = "ПОРТЫ — открытые соединения",
-        [CheckCategory.Tunnel] = "ТУННЕЛЬ — работа VLESS",
-        [CheckCategory.Dpi]    = "DPI — поиск блокировок и замедлений",
+        [CheckCategory.Ping]   = "ДОСТУПНОСТЬ СЕРВЕРОВ",
+        [CheckCategory.Port]   = "ПОРТЫ",
+        [CheckCategory.Tunnel] = "ТУННЕЛЬ VLESS",
+        [CheckCategory.Dpi]    = "DPI — БЛОКИРОВКИ И ЗАМЕДЛЕНИЯ",
         [CheckCategory.Stats]  = "СТАТИСТИКА",
         [CheckCategory.General]= "ПРОЧЕЕ",
     };
@@ -35,114 +43,141 @@ public class StatusForm : Form
 
     public StatusForm()
     {
+        Theme.Refresh();
+
         Text = "VLESS Monitor";
-        Size = new Size(840, 620);
-        MinimumSize = new Size(620, 440);
+        Size = new Size(860, 640);
+        MinimumSize = new Size(640, 460);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Theme.Bg;
-        ForeColor = Theme.Fg;
-        Font = new Font(Theme.FontFamily, 9.5f);
+        Font = new Font(Theme.UiFont, 9.5f);
+        DoubleBuffered = true;
         Icon = IconFactory.Create(OverallStatus.Unknown);
 
-        // ── Header ──
-        var header = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = Theme.Bg };
-
-        _statusLabel = new Label
-        {
-            Text = "○ Проверяю...",
-            Font = new Font(Theme.FontFamily, 15f, FontStyle.Bold),
-            ForeColor = Theme.FgDim,
-            AutoSize = true,
-            Location = new Point(16, 14),
-        };
-        header.Controls.Add(_statusLabel);
-
-        var btnSettings = MakeButton("⚙  Настройки", Theme.Lavender);
-        btnSettings.Click += (_, _) => SettingsRequested?.Invoke();
-        var btnRefresh = MakeButton("⟳  Обновить", Theme.Blue);
-        btnRefresh.Click += (_, _) => RefreshRequested?.Invoke();
-
-        _timeLabel = new Label
-        {
-            Text = "", ForeColor = Theme.FgDim, AutoSize = true,
-            Font = new Font(Theme.FontFamily, 8.5f),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-        };
-
-        header.Controls.Add(btnSettings);
-        header.Controls.Add(btnRefresh);
-        header.Controls.Add(_timeLabel);
-        header.Resize += (_, _) => LayoutHeader(header, btnSettings, btnRefresh);
-        LayoutHeader(header, btnSettings, btnRefresh);
-
-        // ── Diagnosis footer ──
-        var footer = new Panel { Dock = DockStyle.Bottom, Height = 70, BackColor = Theme.Bg };
+        // ── Footer (diagnosis) ──
+        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 64 };
         _diagLabel = new Label
         {
             Dock = DockStyle.Fill,
-            ForeColor = Theme.FgDim,
-            Font = new Font(Theme.FontFamily, 10f),
-            Padding = new Padding(16, 8, 16, 8),
+            Font = new Font(Theme.UiFont, 10f),
+            Padding = new Padding(20, 10, 20, 10),
             TextAlign = ContentAlignment.MiddleLeft,
         };
         footer.Controls.Add(_diagLabel);
 
-        // ── List ──
-        _listPanel = new Panel
+        // ── Header ──
+        _header = new BufferedPanel { Dock = DockStyle.Top, Height = 68 };
+
+        _statusLabel = new Label
         {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Bg,
-            AutoScroll = true,
-            Padding = new Padding(8, 4, 8, 4),
+            Text = "Проверяю…",
+            Font = new Font(Theme.UiFont, 16f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(20, 18),
+        };
+        _header.Controls.Add(_statusLabel);
+
+        _btnSettings = new FluentButton { Text = "Настройки", Width = 110 };
+        _btnSettings.Click += (_, _) => SettingsRequested?.Invoke();
+        _btnRefresh = new FluentButton { Text = "Обновить", Width = 100, Accent = true };
+        _btnRefresh.Click += (_, _) => RefreshRequested?.Invoke();
+
+        _timeLabel = new Label
+        {
+            Text = "", AutoSize = true,
+            Font = new Font(Theme.UiFont, 8.5f),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
         };
 
-        Controls.Add(_listPanel);
+        _header.Controls.Add(_btnSettings);
+        _header.Controls.Add(_btnRefresh);
+        _header.Controls.Add(_timeLabel);
+        _header.Resize += (_, _) => LayoutHeader();
+
+        // ── List ──
+        _list = new BufferedPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Padding = new Padding(16, 8, 16, 8),
+        };
+        _list.Resize += (_, _) => ResizeRows();
+
+        Controls.Add(_list);
         Controls.Add(footer);
-        Controls.Add(header);
+        Controls.Add(_header);
+
+        ApplyTheme();
+        LayoutHeader();
 
         _ageTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _ageTimer.Tick += (_, _) => UpdateAge();
         _ageTimer.Start();
 
-        // Hide instead of close
+        Theme.Changed += OnThemeChanged;
         FormClosing += (s, e) =>
         {
-            if (e.CloseReason == CloseReason.UserClosing)
-            {
-                e.Cancel = true;
-                Hide();
-            }
+            if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); }
         };
     }
 
-    private void LayoutHeader(Panel header, Control btnSettings, Control btnRefresh)
+    // ── Theme ────────────────────────────────────────────────
+    protected override void OnHandleCreated(EventArgs e)
     {
-        btnSettings.Location = new Point(header.Width - btnSettings.Width - 14, 13);
-        btnRefresh.Location = new Point(btnSettings.Left - btnRefresh.Width - 8, 13);
-        _timeLabel.Location = new Point(btnRefresh.Left - 150, 20);
-        _timeLabel.Width = 140;
+        base.OnHandleCreated(e);
+        ApplyWindowChrome();
     }
 
-    private Button MakeButton(string text, Color color)
+    private void ApplyWindowChrome()
     {
-        var b = new Button
-        {
-            Text = text,
-            AutoSize = false,
-            Size = new Size(110, 30),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Theme.Bg3,
-            ForeColor = color,
-            Font = new Font(Theme.FontFamily, 9.5f),
-            Cursor = Cursors.Hand,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-        };
-        b.FlatAppearance.BorderColor = Theme.Bg3;
-        b.FlatAppearance.MouseOverBackColor = Theme.Bg2;
-        return b;
+        Native.UseDarkTitleBar(Handle, Theme.Current.IsDark);
+        Native.UseRoundedCorners(Handle);
     }
 
-    /// <summary>Thread-safe update entry point.</summary>
+    private void ApplyTheme()
+    {
+        var p = Theme.Current;
+        BackColor = p.WindowBg;
+        _header.BackColor = p.WindowBg;
+        _list.BackColor = p.WindowBg;
+        _diagLabel.Parent!.BackColor = p.WindowBg;
+        _statusLabel.BackColor = p.WindowBg;
+        _timeLabel.BackColor = p.WindowBg;
+        _timeLabel.ForeColor = p.TextSecondary;
+        foreach (var c in _layoutControls)
+            c.BackColor = p.WindowBg;
+    }
+
+    private void OnThemeChanged()
+    {
+        if (InvokeRequired) { BeginInvoke(OnThemeChanged); return; }
+        ApplyTheme();
+        ApplyWindowChrome();
+        Icon = IconFactory.Create(_lastOverall);
+        _header.Invalidate(true);
+        _list.Invalidate(true);
+        foreach (var r in _rows.Values) r.Invalidate();
+        Invalidate(true);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (Native.IsImmersiveColorSetChange(m))
+            Theme.ReloadAndNotify();
+    }
+
+    private void LayoutHeader()
+    {
+        _btnSettings.Location = new Point(_header.Width - _btnSettings.Width - 20, 18);
+        _btnRefresh.Location = new Point(_btnSettings.Left - _btnRefresh.Width - 8, 18);
+        _timeLabel.Location = new Point(_btnRefresh.Left - 160, 26);
+        _timeLabel.Width = 150;
+        _timeLabel.TextAlign = ContentAlignment.MiddleRight;
+    }
+
+    // ── State updates ────────────────────────────────────────
+    private OverallStatus _lastOverall = OverallStatus.Unknown;
+
     public void UpdateState(MonitorState state)
     {
         if (InvokeRequired) { BeginInvoke(() => ApplyState(state)); return; }
@@ -152,132 +187,90 @@ public class StatusForm : Form
     private void ApplyState(MonitorState state)
     {
         _lastUpdate = state.LastUpdate;
+        _lastOverall = state.Overall;
+        var p = Theme.Current;
 
         var (text, color) = state.Overall switch
         {
-            OverallStatus.Green  => ("● Всё в порядке", Theme.Green),
-            OverallStatus.Yellow => ("◑ Обнаружены проблемы", Theme.Yellow),
-            OverallStatus.Red    => ("● Связь нарушена", Theme.Red),
-            _                    => ("○ Проверяю...", Theme.FgDim),
+            OverallStatus.Green  => ("Всё в порядке", p.Success),
+            OverallStatus.Yellow => ("Обнаружены проблемы", p.Caution),
+            OverallStatus.Red    => ("Связь нарушена", p.Critical),
+            _                    => ("Проверяю…", p.TextSecondary),
         };
         _statusLabel.Text = text;
         _statusLabel.ForeColor = color;
-
         _diagLabel.Text = state.Diagnosis;
         _diagLabel.ForeColor = color;
-
         Icon = IconFactory.Create(state.Overall);
-
-        RebuildList(state);
-    }
-
-    private void RebuildList(MonitorState state)
-    {
-        _listPanel.SuspendLayout();
-        _listPanel.Controls.Clear();
 
         var sorted = state.Checks.Values
             .OrderBy(r => Array.IndexOf(CatOrder, r.Category))
             .ThenBy(r => r.Name)
             .ToList();
 
-        int y = 4;
-        CheckCategory? curCat = null;
-        int width = _listPanel.ClientSize.Width - 24;
+        // Layout key = ordered structure. Rebuild layout only if it changed.
+        var key = string.Join("|", sorted.Select(r => r.Category + ":" + r.Name));
+        if (key != _layoutKey)
+        {
+            RebuildLayout(sorted);
+            _layoutKey = key;
+        }
+
+        // In-place value updates — no flicker.
+        foreach (var r in sorted)
+            if (_rows.TryGetValue(r.Name, out var row))
+                row.SetResult(r);
+    }
+
+    private void RebuildLayout(List<CheckResult> sorted)
+    {
+        _list.SuspendLayout();
+        foreach (var c in _layoutControls) { _list.Controls.Remove(c); c.Dispose(); }
+        _layoutControls.Clear();
+        _rows.Clear();
+
+        int y = 8;
+        int width = _list.ClientSize.Width - 32 - SystemInformation.VerticalScrollBarWidth;
+        CheckCategory? cat = null;
 
         foreach (var r in sorted)
         {
-            if (curCat != r.Category)
+            if (cat != r.Category)
             {
-                curCat = r.Category;
-                var section = new Label
+                cat = r.Category;
+                var hdr = new SectionHeader(CatLabel.GetValueOrDefault(r.Category, r.Category.ToString()))
                 {
-                    Text = "  " + CatLabel.GetValueOrDefault(r.Category, r.Category.ToString()),
-                    ForeColor = Theme.Lavender,
-                    Font = new Font(Theme.FontFamily, 8f, FontStyle.Bold),
-                    BackColor = Theme.Bg3,
-                    Size = new Size(width, 24),
-                    Location = new Point(8, y),
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                    Location = new Point(16, y),
+                    Width = width,
+                    BackColor = Theme.Current.WindowBg,
                 };
-                _listPanel.Controls.Add(section);
-                y += 28;
+                _list.Controls.Add(hdr);
+                _layoutControls.Add(hdr);
+                y += hdr.Height + 2;
             }
 
-            var row = MakeRow(r, width);
-            row.Location = new Point(8, y);
-            _listPanel.Controls.Add(row);
-            y += row.Height + 4;
+            var row = new CheckRowControl
+            {
+                Location = new Point(16, y),
+                Width = width,
+                BackColor = Theme.Current.WindowBg,
+            };
+            row.SetResult(r);
+            _list.Controls.Add(row);
+            _layoutControls.Add(row);
+            _rows[r.Name] = row;
+            y += row.Height + 6;
         }
 
-        _listPanel.ResumeLayout();
+        _list.ResumeLayout();
     }
 
-    private Control MakeRow(CheckResult r, int width)
+    private void ResizeRows()
     {
-        var panel = new Panel
-        {
-            Size = new Size(width, 46),
-            BackColor = Theme.Bg2,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-        };
-
-        // Colored dot
-        var dotColor = r.Ok ? Theme.Green : Theme.Red;
-        var dot = new Label
-        {
-            Text = "●",
-            ForeColor = dotColor,
-            Font = new Font(Theme.FontFamily, 13f),
-            Size = new Size(28, 46),
-            Location = new Point(6, 0),
-            TextAlign = ContentAlignment.MiddleCenter,
-        };
-        panel.Controls.Add(dot);
-
-        // Check name
-        var name = new Label
-        {
-            Text = r.Name,
-            ForeColor = Theme.Fg,
-            Font = new Font(Theme.FontFamily, 9.5f),
-            Size = new Size(230, 46),
-            Location = new Point(38, 0),
-            TextAlign = ContentAlignment.MiddleLeft,
-        };
-        panel.Controls.Add(name);
-
-        // Comment (big) + raw value (small)
-        var comment = new Label
-        {
-            Text = r.Comment.Length > 0 ? r.Comment : r.Message,
-            ForeColor = r.Ok ? Theme.Green : Theme.Yellow,
-            Font = new Font(Theme.FontFamily, 9.5f),
-            Location = new Point(276, 5),
-            Size = new Size(width - 286, 22),
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-        };
-        panel.Controls.Add(comment);
-
-        if (r.Comment.Length > 0 && r.Message.Length > 0)
-        {
-            var raw = new Label
-            {
-                Text = r.Message,
-                ForeColor = Theme.FgDim,
-                Font = new Font(Theme.FontFamily, 8f),
-                Location = new Point(276, 25),
-                Size = new Size(width - 286, 16),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-            };
-            panel.Controls.Add(raw);
-        }
-
-        return panel;
+        int width = _list.ClientSize.Width - 32 - SystemInformation.VerticalScrollBarWidth;
+        if (width < 100) return;
+        foreach (var c in _layoutControls)
+            c.Width = width;
     }
 
     private void UpdateAge()
@@ -293,5 +286,11 @@ public class StatusForm : Form
         WindowState = FormWindowState.Normal;
         BringToFront();
         Activate();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) Theme.Changed -= OnThemeChanged;
+        base.Dispose(disposing);
     }
 }

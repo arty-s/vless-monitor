@@ -18,6 +18,7 @@ public class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext()
     {
         Logger.Start();
+        Theme.Refresh();
         _cfg = Config.Load();
         Logger.Info($"Конфиг загружен: VLESS={(string.IsNullOrEmpty(_cfg.VlessUri) ? "<пусто>" : _cfg.VpsHost + ":" + _cfg.VlessPort)}, " +
                     $"интервал={_cfg.CheckIntervalSec}с, DPI-проба={_cfg.DpiProbeSizeKb}КБ, порог={_cfg.LatencyRatioThreshold}×");

@@ -31,9 +31,10 @@ public class SettingsForm : Form
         Size = new Size(640, 560);
         MinimumSize = new Size(600, 520);
         StartPosition = FormStartPosition.CenterScreen;
+        Theme.Refresh();
         BackColor = Theme.Bg;
         ForeColor = Theme.Fg;
-        Font = new Font(Theme.FontFamily, 9.5f);
+        Font = new Font(Theme.UiFont, 9.5f);
         Icon = IconFactory.Create(OverallStatus.Unknown);
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
@@ -116,6 +117,13 @@ public class SettingsForm : Form
         Controls.Add(btnPanel);
 
         LoadValues();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Native.UseDarkTitleBar(Handle, Theme.Current.IsDark);
+        Native.UseRoundedCorners(Handle);
     }
 
     private void LoadValues()

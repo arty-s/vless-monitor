@@ -17,8 +17,9 @@ public class DownloadForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false; MinimizeBox = false;
+        Theme.Refresh();
         BackColor = Theme.Bg; ForeColor = Theme.Fg;
-        Font = new Font(Theme.FontFamily, 9.5f);
+        Font = new Font(Theme.UiFont, 9.5f);
         Icon = IconFactory.Create(OverallStatus.Unknown);
 
         var info = new Label
@@ -67,6 +68,13 @@ public class DownloadForm : Form
         Controls.Add(_bar);
         Controls.Add(_status);
         Controls.Add(info);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Native.UseDarkTitleBar(Handle, Theme.Current.IsDark);
+        Native.UseRoundedCorners(Handle);
     }
 
     private async void OnDownload(object? sender, EventArgs e)
