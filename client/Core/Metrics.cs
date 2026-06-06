@@ -19,6 +19,7 @@ public class MetricSeries
     private readonly List<MetricSample> _samples = new();
     private const int MaxSamples = 4000;
     private readonly object _lock = new();
+    private bool _kindSet;
 
     public MetricSeries(string name, CheckCategory cat) { Name = name; Category = cat; }
 
@@ -26,7 +27,10 @@ public class MetricSeries
     {
         lock (_lock)
         {
-            Kind = kind;
+            // Fix the kind on the first sample so a check that occasionally
+            // returns no value (e.g. a failed DPI test) doesn't flip the series
+            // between line and state, which corrupted the graph and stats.
+            if (!_kindSet) { Kind = kind; _kindSet = true; }
             if (unit.Length > 0) Unit = unit;
             _samples.Add(s);
             if (_samples.Count > MaxSamples) _samples.RemoveRange(0, _samples.Count - MaxSamples);

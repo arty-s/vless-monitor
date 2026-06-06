@@ -49,10 +49,18 @@ public class MetricGraph : Panel
     private static void StylePlot(ScottPlot.WinForms.FormsPlot fp)
     {
         var p = Theme.Current;
+        var axisColor = ToSP(p.TextSecondary);
         fp.Plot.FigureBackground.Color = ToSP(p.CardBg);
         fp.Plot.DataBackground.Color = ToSP(p.CardBg);
-        fp.Plot.Axes.Color(ToSP(p.TextSecondary));
-        fp.Plot.Grid.MajorLineColor = ToSP(p.CardStroke).WithAlpha(60);
+        fp.Plot.Axes.Color(axisColor);
+        // Explicitly colour tick LABELS too — Axes.Color leaves them dark on some builds.
+        fp.Plot.Axes.Bottom.TickLabelStyle.ForeColor = axisColor;
+        fp.Plot.Axes.Left.TickLabelStyle.ForeColor = axisColor;
+        fp.Plot.Axes.Bottom.TickLabelStyle.FontSize = 11;
+        fp.Plot.Axes.Left.TickLabelStyle.FontSize = 11;
+        fp.Plot.Axes.Bottom.MajorTickStyle.Color = axisColor;
+        fp.Plot.Axes.Left.MajorTickStyle.Color = axisColor;
+        fp.Plot.Grid.MajorLineColor = ToSP(p.CardStroke).WithAlpha(50);
         fp.Plot.Axes.DateTimeTicksBottom();
         fp.UserInputProcessor.Disable(); // read-only dashboard, no pan/zoom
     }

@@ -23,6 +23,16 @@ public class MonitorWindow : Form
         [CheckCategory.Stats]  = "Статистика",
         [CheckCategory.General]= "Прочее",
     };
+    // Short labels for the narrow sidebar (full text doesn't fit).
+    private static readonly Dictionary<CheckCategory, string> CatShort = new()
+    {
+        [CheckCategory.Ping]   = "Пинги",
+        [CheckCategory.Port]   = "Порты",
+        [CheckCategory.Tunnel] = "Туннель",
+        [CheckCategory.Dpi]    = "DPI / замедления",
+        [CheckCategory.Stats]  = "Статистика",
+        [CheckCategory.General]= "Прочее",
+    };
     private static readonly CheckCategory[] CatOrder =
         { CheckCategory.Ping, CheckCategory.Port, CheckCategory.Tunnel,
           CheckCategory.Dpi, CheckCategory.Stats, CheckCategory.General };
@@ -105,7 +115,7 @@ public class MonitorWindow : Form
         // ── Sidebar ──
         _sidebar = new BufferedPanel
         {
-            Dock = DockStyle.Left, Width = 250, AutoScroll = true,
+            Dock = DockStyle.Left, Width = 280, AutoScroll = true,
             BackColor = Theme.Current.WindowBg, Padding = new Padding(8),
         };
 
@@ -119,8 +129,8 @@ public class MonitorWindow : Form
         };
         _stats = new BufferedPanel
         {
-            Dock = DockStyle.Bottom, Height = 150, BackColor = Theme.Current.WindowBg,
-            Padding = new Padding(14, 8, 14, 8), AutoScroll = true,
+            Dock = DockStyle.Bottom, Height = 184, BackColor = Theme.Current.WindowBg,
+            Padding = new Padding(14, 6, 14, 8), AutoScroll = true,
         };
         _grid = new BufferedPanel
         {
@@ -234,7 +244,7 @@ public class MonitorWindow : Form
         int y = 8;
         foreach (var cat in cats)
         {
-            var item = new GroupItem(cat, CatTitle.GetValueOrDefault(cat, cat.ToString()))
+            var item = new GroupItem(cat, CatShort.GetValueOrDefault(cat, cat.ToString()))
             {
                 Location = new Point(8, y),
                 Width = _sidebar.ClientSize.Width - 24,
@@ -297,7 +307,11 @@ public class MonitorWindow : Form
         if (_graphs.Count == 0) return;
         int pad = 10;
         int avail = _grid.ClientSize.Width - pad;
-        int cols = Math.Max(1, Math.Min(4, avail / 360));
+        // Columns: as many as fit by width, but never more than the number of
+        // graphs — otherwise 2 graphs would sit in 2 of 4 slots, leaving the
+        // right half of the window empty.
+        int maxByWidth = Math.Max(1, avail / 460);
+        int cols = Math.Max(1, Math.Min(_graphs.Count, Math.Min(4, maxByWidth)));
         int rows = (int)Math.Ceiling(_graphs.Count / (double)cols);
         int cw = (avail - pad * (cols - 1)) / cols;
         int ch = Math.Max(150, (_grid.ClientSize.Height - pad - pad * rows) / rows);
@@ -321,13 +335,28 @@ public class MonitorWindow : Form
     }
 
     // ── Extended stats ───────────────────────────────────────
+    private string WindowLabel => _window.TotalHours >= 1 ? "1 час"
+        : _window.TotalMinutes >= 5 ? "5 минут" : "1 минуту";
+
     private void RefreshStats()
     {
         if (_selected == null) return;
         var p = Theme.Current;
         _stats.SuspendLayout();
         _stats.Controls.Clear();
-        int y = 4;
+        int y = 2;
+
+        // Legend so "аптайм" / period are unambiguous.
+        _stats.Controls.Add(new Label
+        {
+            Text = $"Статистика за выбранный период: {WindowLabel}.   " +
+                   "«Аптайм» — доля успешных проверок за этот период.   тек / min / avg / max — текущее и крайние значения.",
+            AutoSize = false, Width = _stats.ClientSize.Width - 20, Height = 22,
+            Location = new Point(4, y), ForeColor = p.TextSecondary,
+            Font = new Font(Theme.UiFont, 9f, FontStyle.Italic), TextAlign = ContentAlignment.MiddleLeft,
+        });
+        y += 26;
+
         foreach (var s in MetricsStore.Instance.ByCategory(_selected.Value))
         {
             var (min, avg, max, uptime) = s.Stats(_window);
@@ -335,17 +364,19 @@ public class MonitorWindow : Form
             var color = (last?.Ok ?? true) ? p.Success : p.Critical;
 
             string line = s.Kind == MetricKind.State
-                ? $"{s.Name}:  аптайм {uptime:0}%"
-                : $"{s.Name}:  тек {last?.Value ?? 0:0.#} {s.Unit}   •   min {min:0.#}  avg {avg:0.#}  max {max:0.#}   •   аптайм {uptime:0}%";
+                ? $"{s.Name}:   аптайм {uptime:0}%"
+                : $"{s.Name}:   тек {last?.Value ?? 0:0.#} {s.Unit}".TrimEnd()
+                    + $"   •   min {min:0.#}  avg {avg:0.#}  max {max:0.#} {s.Unit}".TrimEnd()
+                    + $"   •   аптайм {uptime:0}%";
 
             var lbl = new Label
             {
-                Text = line, AutoSize = false, Width = _stats.ClientSize.Width - 20, Height = 22,
+                Text = line, AutoSize = false, Width = _stats.ClientSize.Width - 20, Height = 26,
                 Location = new Point(4, y), ForeColor = color,
-                Font = new Font(Theme.UiFont, 9f), TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font(Theme.UiFont, 10.5f), TextAlign = ContentAlignment.MiddleLeft,
             };
             _stats.Controls.Add(lbl);
-            y += 24;
+            y += 28;
         }
         _stats.ResumeLayout();
     }
@@ -398,8 +429,8 @@ public class MonitorWindow : Form
             Cursor = Cursors.Hand;
             _spark = new Sparkline
             {
-                Parent = this, Width = 70, Height = 34,
-                Location = new Point(Width - 78, 18),
+                Parent = this, Width = 52, Height = 32,
+                Location = new Point(Width - 60, 18),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
             };
             _spark.Click += (_, _) => Clicked?.Invoke();
@@ -444,12 +475,13 @@ public class MonitorWindow : Form
             using (var dot = new SolidBrush(dotColor))
                 g.FillEllipse(dot, 12, Height / 2 - 5, 10, 10);
 
+            var fmt = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
             using (var tb = new SolidBrush(p.TextPrimary))
             using (var f = new Font(Theme.UiFont, 9.5f, FontStyle.Bold))
-                g.DrawString(_title, f, tb, new RectangleF(30, 10, Width - 110, 20));
+                g.DrawString(_title, f, tb, new RectangleF(30, 11, Width - 74, 20), fmt);
             using (var sb = new SolidBrush(p.TextSecondary))
             using (var f = new Font(Theme.UiFont, 8.5f))
-                g.DrawString(_summary, f, sb, new RectangleF(30, 32, Width - 110, 18));
+                g.DrawString(_summary, f, sb, new RectangleF(30, 33, Width - 74, 18), fmt);
         }
     }
 }
