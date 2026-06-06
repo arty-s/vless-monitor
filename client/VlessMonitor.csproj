@@ -34,8 +34,16 @@
       <LogicalName>xray.exe</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+  <!-- probe server uploaded to the VPS by the install wizard -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\server\probe_server.py">
+      <LogicalName>probe_server.py</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ScottPlot.WinForms" Version="5.1.58" />
+    <PackageReference Include="SSH.NET" Version="2025.1.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.8" />
   </ItemGroup>
 
 </Project>

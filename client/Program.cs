@@ -15,6 +15,11 @@ internal static class Program
             SelfTest();
             return;
         }
+        if (Environment.GetEnvironmentVariable("VLESSMON_INSTALLTEST") == "1")
+        {
+            InstallTest();
+            return;
+        }
 
         // Single-instance guard
         using var mutex = new Mutex(true, "VlessMonitor_SingleInstance", out bool isNew);
@@ -39,6 +44,40 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
         Application.Run(new TrayApplicationContext());
+    }
+
+    /// <summary>Headless installer test (VLESSMON_INSTALLTEST=1): runs the full SSH
+    /// install against VM_HOST/VM_USER/VM_PASS and logs every step.</summary>
+    private static void InstallTest()
+    {
+        Logger.Start();
+        Logger.MinLevel = LogLevel.Debug;
+        try
+        {
+            var cred = new ServerCredentials
+            {
+                Host = Environment.GetEnvironmentVariable("VM_HOST") ?? "",
+                Port = int.TryParse(Environment.GetEnvironmentVariable("VM_PORT"), out var pp) ? pp : 22,
+                User = Environment.GetEnvironmentVariable("VM_USER") ?? "root",
+                Auth = SshAuth.Password,
+                Password = Environment.GetEnvironmentVariable("VM_PASS") ?? "",
+            };
+            void Log(string s) { Logger.Info("INSTALLTEST " + s); Console.WriteLine(s); }
+
+            using var inst = new ServerInstaller(cred, Log);
+            inst.Connect();
+            var si = inst.Detect();
+            var secret = ServerInstaller.GenerateSecret();
+            var res = inst.Install(si, 8765, secret);
+            Log($"RESULT success={res.Success} port={res.Port} tunnelOnly={res.TunnelOnly} msg={res.Message}");
+            if (res.Success && !res.TunnelOnly)
+            {
+                bool ext = ServerInstaller.VerifyExternalAsync(cred.Host, res.Port, res.Secret).GetAwaiter().GetResult();
+                Log($"EXTERNAL reachable={ext}");
+            }
+        }
+        catch (Exception ex) { Logger.Error("INSTALLTEST упал", ex); Console.WriteLine("FAIL: " + ex.Message); }
+        finally { Logger.Stop(); }
     }
 
     /// <summary>

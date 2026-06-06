@@ -65,6 +65,7 @@ public class TrayApplicationContext : ApplicationContext
         menu.Items.Add("📊  Открыть статусы", null, (_, _) => OpenStatus());
         menu.Items.Add("⟳  Проверить сейчас", null, (_, _) => _checker.RunNow());
         menu.Items.Add("⚙  Настройки", null, (_, _) => OpenSettings());
+        menu.Items.Add("🖥  Серверный модуль…", null, (_, _) => OpenServerWizard());
         menu.Items.Add("🩺  Собрать диагностику", null, (_, _) => OpenDiagnostics());
         menu.Items.Add("📁  Открыть папку логов", null, (_, _) => OpenLogsFolder());
         menu.Items.Add(new ToolStripSeparator());
@@ -101,6 +102,17 @@ public class TrayApplicationContext : ApplicationContext
     {
         using var dlg = new DiagnosticsForm(_cfg, _checker?.State);
         dlg.ShowDialog();
+    }
+
+    private void OpenServerWizard()
+    {
+        using var dlg = new ServerWizardForm(_cfg);
+        dlg.ShowDialog();
+        // The wizard may have changed probe port/secret in config.json — reload.
+        _cfg = Config.Load();
+        Logger.MinLevel = _cfg.VerboseLog ? LogLevel.Debug : LogLevel.Info;
+        _checker.Cfg = _cfg;
+        _checker.RunNow();
     }
 
     private void OpenLogsFolder()

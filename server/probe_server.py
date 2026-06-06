@@ -153,16 +153,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--secret", default=SECRET)
+    parser.add_argument("--bind", default="0.0.0.0",
+                        help="Bind address: 0.0.0.0 (public) or 127.0.0.1 (tunnel-only)")
     args = parser.parse_args()
 
     SECRET = args.secret
 
     # ThreadingHTTPServer: each request in its own thread, so a slow /stream
     # request can't block health/beacon checks (the bug that caused timeouts).
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
+    server = ThreadingHTTPServer((args.bind, args.port), Handler)
     server.daemon_threads = True
     server.request_queue_size = 64
-    print(f"Probe server listening on 0.0.0.0:{args.port} (threaded)")
+    print(f"Probe server listening on {args.bind}:{args.port} (threaded)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
