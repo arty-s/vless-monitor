@@ -67,16 +67,16 @@ public class MonitorWindow : Form
         Icon = IconFactory.Create(OverallStatus.Unknown);
 
         // ── Header ──
-        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 60, BackColor = Theme.Current.WindowBg };
+        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 68, BackColor = Theme.Current.WindowBg };
         _overall = new Label
         {
             Text = "Проверяю…", AutoSize = true, Location = new Point(18, 10),
-            Font = new Font(Theme.UiFont, 15f, FontStyle.Bold), ForeColor = Theme.Current.TextSecondary,
+            Font = new Font(Theme.UiFont, 17f, FontStyle.Bold), ForeColor = Theme.Current.TextSecondary,
         };
         _diag = new Label
         {
-            Text = "", AutoSize = false, Location = new Point(20, 38), Size = new Size(700, 18),
-            Font = new Font(Theme.UiFont, 9f), ForeColor = Theme.Current.TextSecondary,
+            Text = "", AutoSize = false, Location = new Point(20, 44), Size = new Size(700, 20),
+            Font = new Font(Theme.UiFont, 10.5f), ForeColor = Theme.Current.TextSecondary,
             AutoEllipsis = true,
         };
         header.Controls.Add(_overall);
@@ -109,8 +109,12 @@ public class MonitorWindow : Form
         _periodBar.Controls.Add(btnSettings);
         _periodBar.Controls.Add(btnDiag);
         header.Controls.Add(_periodBar);
-        header.Resize += (_, _) => _periodBar.Location =
-            new Point(header.Width - _periodBar.PreferredSize.Width - 16, 14);
+        header.Resize += (_, _) =>
+        {
+            _periodBar.Location = new Point(header.Width - _periodBar.PreferredSize.Width - 16, 16);
+            // Keep the diagnosis from sliding under the buttons on narrow widths.
+            _diag.Width = Math.Max(120, _periodBar.Left - _diag.Left - 16);
+        };
 
         // ── Sidebar ──
         _sidebar = new BufferedPanel
@@ -123,8 +127,8 @@ public class MonitorWindow : Form
         var right = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Current.WindowBg };
         _rightTitle = new Label
         {
-            Dock = DockStyle.Top, Height = 36, Padding = new Padding(14, 8, 0, 0),
-            Font = new Font(Theme.UiFont, 13f, FontStyle.Bold), ForeColor = Theme.Current.TextPrimary,
+            Dock = DockStyle.Top, Height = 42, Padding = new Padding(16, 10, 0, 0),
+            Font = new Font(Theme.UiFont, 15f, FontStyle.Bold), ForeColor = Theme.Current.TextPrimary,
             Text = "",
         };
         _stats = new BufferedPanel
@@ -353,9 +357,9 @@ public class MonitorWindow : Form
                    "«Аптайм» — доля успешных проверок за этот период.   тек / min / avg / max — текущее и крайние значения.",
             AutoSize = false, Width = _stats.ClientSize.Width - 20, Height = 22,
             Location = new Point(4, y), ForeColor = p.TextSecondary,
-            Font = new Font(Theme.UiFont, 9f, FontStyle.Italic), TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Theme.UiFont, 10f, FontStyle.Italic), TextAlign = ContentAlignment.MiddleLeft,
         });
-        y += 26;
+        y += 28;
 
         foreach (var s in MetricsStore.Instance.ByCategory(_selected.Value))
         {
@@ -371,12 +375,12 @@ public class MonitorWindow : Form
 
             var lbl = new Label
             {
-                Text = line, AutoSize = false, Width = _stats.ClientSize.Width - 20, Height = 26,
+                Text = line, AutoSize = false, Width = _stats.ClientSize.Width - 20, Height = 28,
                 Location = new Point(4, y), ForeColor = color,
-                Font = new Font(Theme.UiFont, 10.5f), TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font(Theme.UiFont, 12f), TextAlign = ContentAlignment.MiddleLeft,
             };
             _stats.Controls.Add(lbl);
-            y += 28;
+            y += 30;
         }
         _stats.ResumeLayout();
     }
@@ -400,6 +404,14 @@ public class MonitorWindow : Form
     public void ShowAndFocus()
     {
         Show(); WindowState = FormWindowState.Normal; BringToFront(); Activate();
+    }
+
+    /// <summary>Test/demo hook: select the i-th category.</summary>
+    internal void SelectIndex(int i)
+    {
+        var cats = MetricsStore.Instance.Categories()
+            .OrderBy(c => Array.IndexOf(CatOrder, c)).ToList();
+        if (i >= 0 && i < cats.Count) Select(cats[i]);
     }
 
     protected override void Dispose(bool disposing)
@@ -477,11 +489,11 @@ public class MonitorWindow : Form
 
             var fmt = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
             using (var tb = new SolidBrush(p.TextPrimary))
-            using (var f = new Font(Theme.UiFont, 9.5f, FontStyle.Bold))
-                g.DrawString(_title, f, tb, new RectangleF(30, 11, Width - 74, 20), fmt);
+            using (var f = new Font(Theme.UiFont, 11f, FontStyle.Bold))
+                g.DrawString(_title, f, tb, new RectangleF(32, 11, Width - 74, 22), fmt);
             using (var sb = new SolidBrush(p.TextSecondary))
-            using (var f = new Font(Theme.UiFont, 8.5f))
-                g.DrawString(_summary, f, sb, new RectangleF(30, 33, Width - 74, 18), fmt);
+            using (var f = new Font(Theme.UiFont, 9.5f))
+                g.DrawString(_summary, f, sb, new RectangleF(32, 35, Width - 74, 18), fmt);
         }
     }
 }

@@ -30,3 +30,6 @@ desktop.ini
 
 # Logs
 *.log
+
+# UI debug captures
+ui-*.png

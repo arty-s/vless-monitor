@@ -22,11 +22,11 @@ public class MetricGraph : Panel
 
         _title = new Label
         {
-            Dock = DockStyle.Top, Height = 24,
-            Font = new Font(Theme.UiFont, 9f, FontStyle.Bold),
+            Dock = DockStyle.Top, Height = 30,
+            Font = new Font(Theme.UiFont, 11.5f, FontStyle.Bold),
             ForeColor = Theme.Current.TextPrimary,
             BackColor = Theme.Current.CardBg,
-            Padding = new Padding(8, 4, 8, 0),
+            Padding = new Padding(10, 5, 8, 0),
         };
 
         try
@@ -56,8 +56,8 @@ public class MetricGraph : Panel
         // Explicitly colour tick LABELS too — Axes.Color leaves them dark on some builds.
         fp.Plot.Axes.Bottom.TickLabelStyle.ForeColor = axisColor;
         fp.Plot.Axes.Left.TickLabelStyle.ForeColor = axisColor;
-        fp.Plot.Axes.Bottom.TickLabelStyle.FontSize = 11;
-        fp.Plot.Axes.Left.TickLabelStyle.FontSize = 11;
+        fp.Plot.Axes.Bottom.TickLabelStyle.FontSize = 13;
+        fp.Plot.Axes.Left.TickLabelStyle.FontSize = 13;
         fp.Plot.Axes.Bottom.MajorTickStyle.Color = axisColor;
         fp.Plot.Axes.Left.MajorTickStyle.Color = axisColor;
         fp.Plot.Grid.MajorLineColor = ToSP(p.CardStroke).WithAlpha(50);

@@ -15,6 +15,11 @@ internal static class Program
             SelfTest();
             return;
         }
+        if (Environment.GetEnvironmentVariable("VLESSMON_SHOWUI") == "1")
+        {
+            ShowUiDemo();
+            return;
+        }
         if (Environment.GetEnvironmentVariable("VLESSMON_INSTALLTEST") == "1")
         {
             InstallTest();
@@ -44,6 +49,77 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
         Application.Run(new TrayApplicationContext());
+    }
+
+    /// <summary>Demo mode (VLESSMON_SHOWUI=1): opens the dashboard with realistic
+    /// fake data and keeps it open for visual inspection.</summary>
+    private static void ShowUiDemo()
+    {
+        Logger.Start();
+        ApplicationConfiguration.Initialize();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Theme.Refresh();
+
+        var rnd = new Random();
+        CheckResult R(string n, bool ok, double? v, CheckCategory c) =>
+            new() { Name = n, Ok = ok, Value = v, Message = v.HasValue ? $"{v:0} мс" : "ok", Comment = "demo", Category = c };
+
+        void Feed()
+        {
+            MetricsStore.Instance.Record(new[]
+            {
+                R("VPS (185.121.12.210)", true, 90 + rnd.Next(8), CheckCategory.Ping),
+                R("Google DNS (8.8.8.8)", true, 17 + rnd.Next(5), CheckCategory.Ping),
+                R("Cloudflare (1.1.1.1)", true, 26 + rnd.Next(5), CheckCategory.Ping),
+                R("Яндекс RU (77.88.8.8)", true, 7 + rnd.Next(4), CheckCategory.Ping),
+                R("Порт VLESS (47572)", true, null, CheckCategory.Port),
+                R("Порт probe (8765)", true, null, CheckCategory.Port),
+                R("Локальный клиент xray", true, null, CheckCategory.Tunnel),
+                R("Интернет через туннель", true, 340 + rnd.Next(40), CheckCategory.Tunnel),
+                R("Туннель — сквозная проверка", true, 320 + rnd.Next(40), CheckCategory.Tunnel),
+                R("DPI: соотношение задержек", true, 1.8 + rnd.NextDouble(), CheckCategory.Dpi),
+                R("DPI: тест на заморозку 16 КБ", true, 50 + rnd.Next(10), CheckCategory.Dpi),
+                R("Статистика xray", true, null, CheckCategory.Stats),
+            });
+        }
+        for (int i = 0; i < 10; i++) { Feed(); Thread.Sleep(30); }
+
+        var win = new MonitorWindow();
+        if (Environment.GetEnvironmentVariable("VLESSMON_MAX") == "1")
+            win.WindowState = FormWindowState.Maximized;
+        var state = new MonitorState { Overall = OverallStatus.Green, Diagnosis = "Всё в порядке. VLESS работает нормально, замедлений нет.", LastUpdate = DateTime.Now, Checks = new() };
+        int tab = int.TryParse(Environment.GetEnvironmentVariable("VLESSMON_TAB"), out var tb) ? tb : 0;
+        win.Shown += (_, _) => { win.UpdateState(state); if (tab > 0) win.SelectIndex(tab); };
+
+        string capDir = Environment.GetEnvironmentVariable("VLESSMON_CAPDIR") ?? AppContext.BaseDirectory;
+        int tick = 0;
+        var t = new System.Windows.Forms.Timer { Interval = 1500 };
+        t.Tick += (_, _) =>
+        {
+            Feed();
+            win.UpdateState(new MonitorState { Overall = OverallStatus.Green, Diagnosis = state.Diagnosis, LastUpdate = DateTime.Now, Checks = new() });
+            tick++;
+            if (tick is 2 or 4) // after data has filled in
+                try { CaptureWindow(win, Path.Combine(capDir, "ui-capture.png")); } catch { }
+        };
+        t.Start();
+        Application.Run(win);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+
+    private static void CaptureWindow(Form win, string path)
+    {
+        using var bmp = new Bitmap(win.Width, win.Height);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            IntPtr hdc = g.GetHdc();
+            PrintWindow(win.Handle, hdc, 2); // PW_RENDERFULLCONTENT (captures Skia/GPU)
+            g.ReleaseHdc(hdc);
+        }
+        bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        Logger.Info("UI-CAPTURE saved: " + path);
     }
 
     /// <summary>Headless installer test (VLESSMON_INSTALLTEST=1): runs the full SSH
